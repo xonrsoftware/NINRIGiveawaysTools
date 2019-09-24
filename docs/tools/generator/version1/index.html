@@ -82,8 +82,7 @@
                 })).promise();
                 let latestblock = result.data[0];
                 let current = result.data[1];
-                if (current !== undefined && current !== null && latestblock.height > current.height && current
-                    .height == height) {
+                if (current !== undefined && current !== null && current.height == height) {
                     if (latestblock.height - height >= 6) {
                         return current;
                     } else alert("Дождитесь решения последующих 6 блоков.");
