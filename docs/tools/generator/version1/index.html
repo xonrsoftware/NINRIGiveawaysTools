@@ -349,7 +349,7 @@
                         if (block !== undefined) {
                             let i = 0;
                             let rearange = [...new Array(userTable.data.length)].map(() => i++);
-                            let seed = await digestMessage(`${codePhrase.value}${block.hash}${userTable.hash}`);
+                            let seed = await digestMessage(`${codePhrase.value}${userTable.hash}${block.hash}`);
                             rearange = shuffleSeed.shuffle(rearange, seed);
                             const output = rearange.map(i => userTable.data[i]);
                             let workbook = new ExcelJS.Workbook();
