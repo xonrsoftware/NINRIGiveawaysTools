@@ -1,0 +1,476 @@
+<head>
+    <title>ПППР - Программа Проведения Проверяемых Розыгрышей</title>
+    <script type="text/javascript" src="assets/jquery-3.4.1.min.js"></script>
+    <script type="text/javascript" src="assets/seedrandom.min.js"></script>
+    <script type="text/javascript" src="assets/shuffle-seed.min.js"></script>
+    <script type="text/javascript" src="assets/secure-random-password.min.js"></script>
+    <script type="text/javascript" src="assets/exceljs.min.js"></script>
+    <script type="text/javascript" src="assets/FileSaver.min.js"></script>
+    <script>
+        const etherscanTokenKey = "YourApiKey";
+        async function digestMessage(message) {
+            const msgUint8 = new TextEncoder('utf-8').encode(message); // encode as (utf-8) Uint8Array
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8); // hash the message
+            const hashArray = Array.from(new Uint8Array(hashBuffer)); // convert buffer to byte array
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join(
+                ''); // convert bytes to hex string
+            return hashHex;
+        }
+        class BlockchainAPIContainer {
+            constructor(timestamp) {
+                this.timestamp = timestamp;
+                this.data = undefined;
+            }
+            async startfill() {
+                this.data = [];
+                let arrayOfDatesToFill = [calculateDateStart(createDateAsUTC(new Date(this.timestamp))),
+                    calculateDateStart(createDateAsUTC(new Date(this.timestamp)), 1), calculateDateStart(
+                        createDateAsUTC(new Date(this.timestamp)), -1)
+                ];
+                for (let time of arrayOfDatesToFill) {
+                    let timestamp = (createDateAsUTC(time)).getTime();
+                    await this.fill(timestamp);
+
+                }
+                this.data.sort(function (a, b) {
+                    return b.time - a.time;
+                });
+            }
+
+            async fill(timestamp) {
+                const result = await ($.ajax({
+                    url: "https://blockchain.info/blocks/" + timestamp,
+                    type: "GET",
+                    dataType: "json",
+                    data: {
+                        format: "json",
+                        cors: true
+                    }
+                })).promise();
+                this.data.push(...result.blocks)
+            }
+
+            determineClosest() {
+                let closesthighest = {};
+                let closestcount = 0;
+                let secondsTimestamp = this.timestamp / 1000;
+                for (let block of this.data) {
+                    if (closestcount < 8 && block.time < secondsTimestamp) {
+                        alert("Подождите решения ещё 8 последующих блоков.");
+                        return false;
+                    }
+                    if (block.time == secondsTimestamp) return block;
+                    if (block.time > secondsTimestamp) {
+                        closestcount++;
+                        closesthighest = block;
+                    } else {
+                        let highestTimeDif = closesthighest.time - secondsTimestamp;
+                        let lowestTimeDif = secondsTimestamp - block.time;
+                        console.log(highestTimeDif);
+                        console.log(closesthighest);
+                        console.log(lowestTimeDif);
+                        if (highestTimeDif < lowestTimeDif) return closesthighest;
+                        else return block;
+                    }
+                }
+            }
+            async getBlockByHeight(height) {
+                const result = await ($.ajax({
+                    url: "https://chain.api.btc.com/v3/block/latest," + height,
+                    type: "GET",
+                    dataType: "json"
+                })).promise();
+                let latestblock = result.data[0];
+                let current = result.data[1];
+                if (current !== undefined && current !== null && latestblock.height > current.height && current
+                    .height == height) {
+                    if (latestblock.height - height >= 6) {
+                        return current;
+                    } else alert("Дождитесь решения последующих 6 блоков.");
+                } else alert("Нужный блок ещё не был найден.");
+            }
+        }
+
+        class RandomnessBeaconContainerv2 {
+            constructor(endpoint) {
+                this.endpoint = endpoint;
+            }
+            async getPrevious(timestamp) {
+                const result = await ($.ajax({
+                    url: this.endpoint + "pulse/time/" + timestamp,
+                    type: "GET",
+                    dataType: "json"
+                })).promise();
+            }
+        }
+
+        class UserTable {
+            constructor(element) {
+                this.element = element;
+                this.data = [];
+                this.hash = undefined;
+            }
+            fill() {
+                this.data = [];
+                this.hash = undefined;
+                let thisToPass = this;
+                return new Promise(function (resolve, reject, data) {
+                    let files = thisToPass.element.files || [];
+                    if (!files.length) {
+                        alert("Не указана таблица.");
+                        return;
+                        resolve();
+                    };
+                    let file = files[0];
+                    let reader = new FileReader();
+                    reader.onloadend = async function (event) {
+                        let arrayBuffer = reader.result;
+                        await thisToPass.fillFromArray(arrayBuffer);
+                        resolve();
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+            async fillFromArray(arrayBuffer) {
+                this.data = [];
+                this.hash = undefined;
+                let workbook = new ExcelJS.Workbook();
+                let thisToPass = this;
+                const innerWorkbook = await workbook.xlsx.load(arrayBuffer);
+                let result = '';
+                innerWorkbook.worksheets[0].eachRow(function (row, rowNumber) {
+                    thisToPass.data.push(row.values.map(v => {
+                        if (v.text !== undefined) return v.text;
+                        else return v;
+                    }));
+                });
+            }
+            async calculateHash(userInput = true) {
+                if (this.hash == undefined) {
+                    let string = [];
+                    let columns = columnsTable.value.split(",");
+                    columns = columns.map(v => parseInt(v));
+                    columns.sort(function (a, b) {
+                        return a - b;
+                    });
+                    for (let val of this.data) {
+                        if (userInput && (columns.length !== 0 && (columns.length !== 1 || (columns.length == 1 &&
+                                columns[0] !==
+                                NaN))))
+                            string = string.concat(val.filter((v, i) => columns.includes(i)));
+                        else
+                            string = string.concat(val);
+                    }
+                    this.hash = await digestMessage(string.join(""));
+                    if (userInput)
+                        tableHashVal.value = this.hash;
+                    return this.hash;
+                } else {
+                    if (userInput && tableHashVal.value != this.hash)
+                        tableHashVal.value = this.hash;
+                    return this.hash;
+                }
+            }
+        }
+
+        function createDateAsUTC(date) {
+            return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date
+                .getMinutes(), date.getSeconds()));
+        }
+
+        function convertDateToUTC(date) {
+            return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date
+                .getUTCMinutes(), date.getUTCSeconds());
+        }
+
+        function calculateDateStart(currentDate, shift = 0) {
+            currentDate.setHours(0, 0, 0, 0);
+            if (shift === 0) {
+                return currentDate;
+            } else if (shift > 0) {
+                currentDate.setDate(currentDate.getDate() + shift)
+                return currentDate;
+            } else if (shift < 0) {
+                currentDate.setDate(currentDate.getDate() + shift)
+                return currentDate;
+            } else return false;
+        }
+
+        function updateURLParameter(url, param, paramVal) {
+            var TheAnchor = null;
+            var newAdditionalURL = "";
+            var tempArray = url.split("?");
+            var baseURL = tempArray[0];
+            var additionalURL = tempArray[1];
+            var temp = "";
+
+            if (additionalURL) {
+                var tmpAnchor = additionalURL.split("#");
+                var TheParams = tmpAnchor[0];
+                TheAnchor = tmpAnchor[1];
+                if (TheAnchor)
+                    additionalURL = TheParams;
+
+                tempArray = additionalURL.split("&");
+
+                for (var i = 0; i < tempArray.length; i++) {
+                    if (tempArray[i].split('=')[0] != param) {
+                        newAdditionalURL += temp + tempArray[i];
+                        temp = "&";
+                    }
+                }
+            } else {
+                var tmpAnchor = baseURL.split("#");
+                var TheParams = tmpAnchor[0];
+                TheAnchor = tmpAnchor[1];
+
+                if (TheParams)
+                    baseURL = TheParams;
+            }
+
+            if (TheAnchor)
+                paramVal += "#" + TheAnchor;
+
+            var rows_txt = temp + "" + param + "=" + paramVal;
+            return baseURL + "?" + newAdditionalURL + rows_txt;
+        }
+
+        function isBlank(str) {
+            return (!str || /^\s*$/.test(str));
+        }
+
+        function isEmpty(str) {
+            return (!str || 0 === str.length);
+        }
+
+        function rebuildURL() {
+            let url = new URL(window.location.href);
+            let urlParams = new URLSearchParams(url.search);
+
+            if (!isBlank(targetBlockHeight.value)) urlParams.set('targetBlockHeight', targetBlockHeight.value);
+            else
+                urlParams.delete('targetBlockHeight');
+
+            if (!isBlank(codePhrase.value)) urlParams.set('codePhrase', codePhrase.value);
+            else
+                urlParams.delete('codePhrase');
+
+            if (!isBlank(columnsTable.value)) urlParams.set('columnsTable', columnsTable.value);
+            else
+                urlParams.delete('columnsTable');
+
+            url.search = urlParams.toString();
+            window.history.replaceState('', '', url.toString());
+        }
+
+        let blockchainAPIContainer;
+        //let randomnessBeaconContainerv2NIST;
+        //let randomnessBeaconContainerv2CLCERT;
+        let userTable;
+        let tableHashVal;
+        let targetBlockHeight;
+        let columnsTable;
+        let codePhrase;
+        let startGiveaway;
+        document.addEventListener("DOMContentLoaded", async () => {
+
+            tableHashVal = document.getElementById("tableHashVal");
+            targetBlockHeight = document.getElementById("targetBlockHeight");
+            columnsTable = document.getElementById("columnsTable");
+            codePhrase = document.getElementById("codePhrase");
+            startGiveaway = document.getElementById("startGiveaway");
+
+            if (await testBrowser()) {
+
+
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.has('targetBlockHeight')) targetBlockHeight.value = urlParams.get(
+                    'targetBlockHeight');
+                if (urlParams.has('codePhrase')) codePhrase.value = urlParams.get('codePhrase');
+                if (urlParams.has('columnsTable')) columnsTable.value = urlParams.get('columnsTable');
+
+                userTable = new UserTable(document.getElementById("userTable"));
+                blockchainAPIContainer = new BlockchainAPIContainer(undefined);
+
+                // await blockchainAPIContainer.startfill();
+
+
+                // await getBlockByTimestamp("1569028245");
+                // console.log(secureRandomPassword.randomString({
+                //    length: 256
+                // }));
+                // console.log(calculateDateStart(createDateAsUTC(new Date(1569028245*1000))));
+            } else {
+                alert("Ваш браузер не поддерживает перемешивание массива.")
+
+            }
+
+        });
+
+        function compareArray(array1, array2) {
+            return array1.length === array2.length && array1.every((value, index) => value === array2[index]);
+        }
+        async function testBrowser() {
+            let testarray = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",
+                "r",
+                "s", "t", "u", "v", "w", "x", "y", "z"
+            ];
+            let resp = shuffleSeed.shuffle(testarray, "TestShuffleSeed");
+            //console.log(resp);
+            if (!compareArray(resp, ["s", "r", "a", "y", "d", "x", "m", "n", "p", "g", "h", "k", "o", "j", "b", "v",
+                    "i", "u", "z",
+                    "l", "e", "c", "q", "w", "f", "t"
+                ])) return false;
+            let userTableTest = new UserTable();
+
+            const result = await $.ajax({
+                url: 'assets/TestSheet.xlsx',
+                cache: false,
+                xhr: function () { // Seems like the only way to get access to the xhr object
+                    var xhr = new XMLHttpRequest();
+                    xhr.responseType = 'arraybuffer'
+                    return xhr;
+                },
+            });
+            await userTableTest.fillFromArray(result);
+            if ((await userTableTest.calculateHash(false)) !=
+                "62f3893602dd6d1947bdbf4d3dcd5c924a728249655edea9d9df2c6b5390b986") {
+                return false;
+            }
+            return true;
+        }
+
+        async function startGiveawayFcn() {
+            startGiveaway.disabled = true;
+            if (userTable.hash !== undefined) {
+                try {
+                    let blockHeight = parseInt(targetBlockHeight.value);
+                    if (blockHeight > 0) {
+                        const block = await blockchainAPIContainer.getBlockByHeight(blockHeight);
+                        if (block !== undefined) {
+                            let i = 0;
+                            let rearange = [...new Array(userTable.data.length)].map(() => i++);
+                            let seed = await digestMessage(`${codePhrase.value}${block.hash}${userTable.hash}`);
+                            rearange = shuffleSeed.shuffle(rearange, seed);
+                            const output = rearange.map(i => userTable.data[i]);
+                            let workbook = new ExcelJS.Workbook();
+                            let worksheet = workbook.addWorksheet("Результат");
+                            worksheet.addRows(output);
+                            let filename = "final.xlsx";
+                            if (!isEmpty(codePhrase.value))
+                                filename = `${codePhrase.value}_final.xlsx`;
+                            await workbook.xlsx.writeBuffer().then(buffer => saveAs(new Blob([buffer]), filename))
+                                .catch(
+                                    err => console.log('Error writing excel export', err));
+                        }
+
+                    } else alert("Порядковый номер блока должен быть больше нуля.");
+                } catch (err) {
+                    alert("Ошибка обработки:" + err);
+                }
+            } else alert("Сначала выберете таблицу.");
+            startGiveaway.disabled = false;
+        }
+
+        async function startTableCalc() {
+            startGiveaway.disabled = true;
+            try {
+                await userTable.fill();
+                await userTable.calculateHash();
+            } catch (err) {
+                alert("Ошибка обработка таблицы:" + err);
+            }
+            startGiveaway.disabled = false;
+        }
+        /*async function getBlockByTimestamp(timestamp) {
+            let currentDate = new Date();
+            let currentTimestamp = currentDate.toUTCString();
+            if (currentTimestamp <= timestamp) {
+                alert("Заданное время ещё не наступило.");
+                return false;
+            }
+            const result = await ($.ajax({
+                url: "https://api.etherscan.io/api",
+                type: "GET",
+                dataType: "json",
+                data: {
+                    module: "proxy",
+                    action: "eth_blockNumber",
+                    apikey: etherscanTokenKey
+                }
+            })).promise();
+            let latestBlock = parseInt(result.result, 16);
+            let breakLoop = false;
+            let step = await determineJump(latestBlock, timestamp);
+            if (step === false) {
+                alert("Ethreum блок ещё не был найден.");
+                return false;
+            }
+            while (breakLoop == false) {
+
+            }
+        }
+        async function determineJump(latestBlock, timestamp) {
+
+        }*/
+    </script>
+    <style>
+        body {
+            width: 768px;
+            margin: 0 auto;
+        }
+
+        .headblock {
+            margin-top: 16px;
+            text-align: left;
+        }
+
+        .headblock table {
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="headinfo">
+        <h2>ПППР - Программа Проведения Проверяемых Розыгрышей</h2>
+        <p>Руководство для участника:<br>
+            1) сохраните: кодовое слово, опубликованную таблицу, номер блока, участвующие колонки;<br>
+            2) выберете таблицу .xlsx, заполните все данные так же;<br>
+            3) нажмите разыграть, результат должен совпасть с финальным результатом розыгрыша, если же нет, то была
+            произведена манипуляция.<br>
+            <i>Проверьте, что время отправки решённого блока (Время получения) было после публикации таблицы, как
+                минимум за 30 минут после, это можно сделать на сайте <a href="https://www.blockchain.com/explorer"
+                    target="_blank">https://www.blockchain.com/explorer</a></i><br>
+            P. S. Первый пункт легко осуществим с помощью репоста в ВК. <i>Таблица не может быть изменена без изменения
+                её хеш-суммы.</i>
+        </p>
+    </div>
+    <div class="headblock">
+        <table>
+            <tr>
+                <th class="tg-btxf">Нужный блок сети Bitcoin<br>(высота, он же рост на blockchain.info):<br><input
+                        id="targetBlockHeight" type="text" onchange="rebuildURL()" /></th>
+                <th class="tg-btxf">Участвующие колонки, через запятую:<br><input id="columnsTable" type="text"
+                        placeholder="Все" onchange="rebuildURL();startTableCalc();" /></th>
+            </tr>
+            <tr>
+                <th class="tg-btxf">Кодовое слово:<br><input id="codePhrase" type="text" onchange="rebuildURL()" /></th>
+                <th class="tg-btxf">Таблица:<br><input id="userTable" type="file" onchange="startTableCalc()"></th>
+            </tr>
+        </table>
+        <table>
+            <tr>
+                <th class="tg-btxf">Хеш таблицы (определяется автоматически):<br><input id="tableHashVal"
+                        style="width: 100%;" type="text" disabled /></th>
+            </tr>
+            <tr>
+                <th class="tg-btxf"><button id="startGiveaway" style="width: 100%;height: 68px;"
+                        onclick="startGiveawayFcn()" disabled>Разыграть</button></th>
+            </tr>
+        </table>
+    </div>
+    <div class="innerblock">
+    </div>
+
+</body>
