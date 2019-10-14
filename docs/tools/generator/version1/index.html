@@ -357,9 +357,9 @@
 
                         if(isBlank(BlockHashLocalVal)){
                             const block = await blockchainAPIContainer.getBlockByHeight(blockHeight);
-                            blockhash = block.hash;
+                            BlockHashLocalVal = block.hash;
                         }
-                        
+
                         if (!isBlank(BlockHashLocalVal)) {
                             let i = 0;
                             let rearange = [...new Array(userTable.data.length)].map(() => i++);
