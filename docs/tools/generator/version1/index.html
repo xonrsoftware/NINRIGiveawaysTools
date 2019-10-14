@@ -258,6 +258,10 @@
             else
                 urlParams.delete('columnsTable');
 
+            if (!isBlank(blockHash.value)) urlParams.set('blockHash', blockHash.value);
+            else
+                urlParams.delete('blockHash');
+
             url.search = urlParams.toString();
             window.history.replaceState('', '', url.toString());
         }
@@ -271,6 +275,7 @@
         let columnsTable;
         let codePhrase;
         let startGiveaway;
+        let blockHash;
         document.addEventListener("DOMContentLoaded", async () => {
 
             tableHashVal = document.getElementById("tableHashVal");
@@ -278,6 +283,7 @@
             columnsTable = document.getElementById("columnsTable");
             codePhrase = document.getElementById("codePhrase");
             startGiveaway = document.getElementById("startGiveaway");
+            blockHash = document.getElementById("blockHashVal");
 
             if (await testBrowser()) {
 
@@ -287,6 +293,8 @@
                     'targetBlockHeight');
                 if (urlParams.has('codePhrase')) codePhrase.value = urlParams.get('codePhrase');
                 if (urlParams.has('columnsTable')) columnsTable.value = urlParams.get('columnsTable');
+                if (urlParams.has('blockHash')) blockHash.value = urlParams.get('blockHash');
+                
 
                 userTable = new UserTable(document.getElementById("userTable"));
                 blockchainAPIContainer = new BlockchainAPIContainer(undefined);
@@ -345,11 +353,17 @@
                 try {
                     let blockHeight = parseInt(targetBlockHeight.value);
                     if (blockHeight > 0) {
-                        const block = await blockchainAPIContainer.getBlockByHeight(blockHeight);
-                        if (block !== undefined) {
+                        let BlockHashLocalVal = (blockHash.value === undefined || blockHash.value === null) ? "" : blockHash.value.trim();
+
+                        if(isBlank(BlockHashLocalVal)){
+                            const block = await blockchainAPIContainer.getBlockByHeight(blockHeight);
+                            blockhash = block.hash;
+                        }
+                        
+                        if (!isBlank(BlockHashLocalVal)) {
                             let i = 0;
                             let rearange = [...new Array(userTable.data.length)].map(() => i++);
-                            let seed = await digestMessage(`${codePhrase.value}${userTable.hash}${block.hash}`);
+                            let seed = await digestMessage(`${codePhrase.value}${userTable.hash}${BlockHashLocalVal}`);
                             rearange = shuffleSeed.shuffle(rearange, seed);
                             const output = rearange.map(i => userTable.data[i]);
                             let workbook = new ExcelJS.Workbook();
@@ -450,8 +464,8 @@
             <tr>
                 <th class="tg-btxf">Нужный блок сети Bitcoin<br>(высота, он же рост на blockchain.info):<br><input
                         id="targetBlockHeight" type="text" onchange="rebuildURL()" /></th>
-                <th class="tg-btxf">Участвующие колонки, через запятую<br>(начиная с 1):<br><input id="columnsTable" type="text"
-                        placeholder="Все" onchange="rebuildURL();startTableCalc();" /></th>
+                <th class="tg-btxf">Участвующие колонки, через запятую<br>(начиная с 1):<br><input id="columnsTable"
+                        type="text" placeholder="Все" onchange="rebuildURL();startTableCalc();" /></th>
             </tr>
             <tr>
                 <th class="tg-btxf">Кодовое слово:<br><input id="codePhrase" type="text" onchange="rebuildURL()" /></th>
@@ -459,6 +473,10 @@
             </tr>
         </table>
         <table>
+            <tr>
+                <th class="tg-btxf">Хеш блока:<br><input id="blockHashVal" onchange="rebuildURL()" style="width: 100%;" type="text"
+                        placeholder="Определить автоматически" /></th>
+            </tr>
             <tr>
                 <th class="tg-btxf">Хеш таблицы (определяется автоматически):<br><input id="tableHashVal"
                         style="width: 100%;" type="text" disabled /></th>
