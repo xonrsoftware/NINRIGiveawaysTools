@@ -87,6 +87,7 @@
                         return current;
                     } else alert("Дождитесь решения последующих 6 блоков.");
                 } else alert("Нужный блок ещё не был найден.");
+                return undefined;
             }
         }
 
@@ -357,6 +358,7 @@
 
                         if (isBlank(BlockHashLocalVal)) {
                             const block = await blockchainAPIContainer.getBlockByHeight(blockHeight);
+                            if(block !== undefined)
                             BlockHashLocalVal = block.hash;
                         }
 
