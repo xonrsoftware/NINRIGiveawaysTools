@@ -340,7 +340,7 @@
                 },
             });
             await userTableTest.fillFromArray(result);
-            if ((await userTableTest.calculateHash(false)) !=
+            if ((await userTableTest.calculateHash()) !=
                 "62f3893602dd6d1947bdbf4d3dcd5c924a728249655edea9d9df2c6b5390b986") {
                 return false;
             }
