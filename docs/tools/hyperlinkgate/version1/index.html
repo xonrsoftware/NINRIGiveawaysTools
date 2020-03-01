@@ -1,0 +1,44 @@
+<head>
+    <style>
+        .outer {
+            display: table;
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+        }
+
+        .middle {
+            display: table-cell;
+            vertical-align: middle;
+        }
+
+        .inner {
+            margin-left: auto;
+            margin-right: auto;
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function (event) {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            const name = urlParams.get('n');
+            const link = urlParams.get('l');
+
+            const hyperDiv = document.getElementById("link");
+
+            hyperDiv.innerHTML = name;
+            hyperDiv.href = link;
+        });
+    </script>
+</head>
+<div class="outer">
+    <div class="middle">
+        <div class="inner">
+            <h1><a id="link" href=""></a></h1>
+        </div>
+    </div>
+</div>
