@@ -25,8 +25,11 @@
         document.addEventListener("DOMContentLoaded", function (event) {
             const urlParams = new URLSearchParams(window.location.search);
 
-            const name = urlParams.get('n');
-            const link = urlParams.get('l');
+            let name = urlParams.get('n');
+            let link = urlParams.get('l');
+            
+            if (name == undefined && link != undefined) name = link; 
+            if (link == undefined && name != undefined) link = name;
 
             const hyperDiv = document.getElementById("link");
 
